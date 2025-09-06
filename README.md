@@ -33,3 +33,8 @@
 
 ## Logging
 All API calls trigger logs to Affordmed Logging API using the reusable middleware.
+
+## Screenshots of Requests
+Screenshots of requests for the routes used can be found in the following Google Drive folder:
+
+[Google Drive - API Requests Screenshots](https://drive.google.com/drive/folders/1WkfJVD-K5VDn6Via-vv3ZgLIdv_YlNZm?usp=sharing)
