@@ -99,14 +99,19 @@ Examples of logged events:
 
 1. Start the server:
 
-   ```bash
-   node BackendTestSubmission/server.js
-   ```
+  ```bash
+  node BackendTestSubmission/server.js
+  ```
 2. Use Postman to send requests to the endpoints:
 
-   * `POST http://localhost:3000/shorturls`
-   * `GET http://localhost:3000/:code`
-   * `GET http://localhost:3000/shorturls/:code/stats`
+  * `POST http://localhost:3000/shorturls`
+  * `GET http://localhost:3000/:code`
+  * `GET http://localhost:3000/shorturls/:code/stats`
 3. Verify both responses and logs.
 
 ---
+
+## Screenshots of Requests
+Screenshots of requests for the routes used can be found in the following Google Drive folder:
+
+[Google Drive - API Requests Screenshots](https://drive.google.com/drive/u/1/folders/1WkfJVD-K5VDn6Via-vv3ZgLIdv_YlNZm)
