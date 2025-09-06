@@ -1,90 +1,108 @@
-import express from "express"
-import dotenv from "dotenv"
-import { logEvent, loggerMiddleware } from "../LoggingMiddleware/logger.js"
+import express from "express";
+import dotenv from "dotenv";
+import { nanoid } from "nanoid";
+import { logEvent, loggerMiddleware } from "../LoggingMiddleware/logger.js";
 
-dotenv.config()
-const app = express()
-app.use(express.json())
-app.use(loggerMiddleware(process.env.ACCESS_TOKEN))
+dotenv.config();
+const app = express();
+app.use(express.json());
 
-const users = []
-const orders = []
+app.use(loggerMiddleware(process.env.ACCESS_TOKEN));
 
-app.get("/health", async (req, res) => {
-  await logEvent("backend", "info", "route", "health check success", process.env.ACCESS_TOKEN)
-  res.json({ status: "ok" })
-})
+const urls = new Map();
 
-app.get("/users", async (req, res) => {
+app.post("/shorturls", async (req, res) => {
   try {
-    if (users.length === 0) {
-      await logEvent("backend", "warn", "repository", "no users found", process.env.ACCESS_TOKEN)
-      return res.json({ users: [] })
-    }
-    await logEvent("backend", "info", "repository", "fetched users list", process.env.ACCESS_TOKEN)
-    res.json({ users })
-  } catch (err) {
-    await logEvent("backend", "error", "handler", err.message, process.env.ACCESS_TOKEN)
-    res.status(500).json({ error: "could not fetch users" })
-  }
-})
+    const { url, validity = 30, shortcode } = req.body;
 
-app.post("/users", async (req, res) => {
+    if (!url) {
+      await logEvent("backend", "error", "route", "Missing URL", process.env.ACCESS_TOKEN);
+      return res.status(400).json({ error: "URL is required" });
+    }
+
+    let code = shortcode || nanoid(6);
+
+    if (urls.has(code)) {
+      await logEvent("backend", "error", "route", `Shortcode already exists: ${code}`, process.env.ACCESS_TOKEN);
+      return res.status(400).json({ error: "Shortcode already exists" });
+    }
+
+    const expiry = new Date(Date.now() + validity * 60000).toISOString();
+    urls.set(code, {
+      url,
+      expiry,
+      createdAt: new Date().toISOString(),
+      clicks: [],
+    });
+
+    await logEvent("backend", "info", "route", `Short URL created: ${code}`, process.env.ACCESS_TOKEN);
+
+    return res.status(201).json({
+      shortLink: `http://localhost:${process.env.PORT || 3000}/${code}`,
+      expiry,
+    });
+  } catch (err) {
+    await logEvent("backend", "error", "route", err.message, process.env.ACCESS_TOKEN);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+
+app.get("/:code", async (req, res) => {
   try {
-    const { name, email } = req.body
-    if (!name || !email) {
-      await logEvent("backend", "error", "handler", "missing name or email", process.env.ACCESS_TOKEN)
-      return res.status(400).json({ error: "name and email required" })
-    }
-    const user = { id: users.length + 1, name, email }
-    users.push(user)
-    await logEvent("backend", "info", "controller", `user created: ${name}`, process.env.ACCESS_TOKEN)
-    res.json(user)
-  } catch (err) {
-    await logEvent("backend", "fatal", "handler", err.message, process.env.ACCESS_TOKEN)
-    res.status(500).json({ error: "internal server error" })
-  }
-})
+    const { code } = req.params;
+    const data = urls.get(code);
 
-app.post("/orders", async (req, res) => {
+    if (!data) {
+      await logEvent("backend", "warn", "route", `Shortcode not found: ${code}`, process.env.ACCESS_TOKEN);
+      return res.status(404).json({ error: "Shortcode not found" });
+    }
+
+    if (new Date() > new Date(data.expiry)) {
+      await logEvent("backend", "warn", "route", `Shortcode expired: ${code}`, process.env.ACCESS_TOKEN);
+      return res.status(410).json({ error: "Shortcode expired" });
+    }
+
+    data.clicks.push({
+      time: new Date().toISOString(),
+      referrer: req.headers["referer"] || "unknown",
+      geo: "IN", 
+    });
+
+    await logEvent("backend", "info", "route", `Redirected shortcode: ${code}`, process.env.ACCESS_TOKEN);
+
+    return res.redirect(data.url);
+  } catch (err) {
+    await logEvent("backend", "error", "route", err.message, process.env.ACCESS_TOKEN);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.get("/shorturls/:code/stats", async (req, res) => {
   try {
-    const { userId, item } = req.body
-    if (!userId || !item) {
-      await logEvent("backend", "error", "handler", "missing userId or item", process.env.ACCESS_TOKEN)
-      return res.status(400).json({ error: "userId and item required" })
+    const { code } = req.params;
+    const data = urls.get(code);
+
+    if (!data) {
+      await logEvent("backend", "warn", "route", `Stats requested for missing shortcode: ${code}`, process.env.ACCESS_TOKEN);
+      return res.status(404).json({ error: "Shortcode not found" });
     }
-    const user = users.find(u => u.id === userId)
-    if (!user) {
-      await logEvent("backend", "warn", "db", `user not found for order: ${userId}`, process.env.ACCESS_TOKEN)
-      return res.status(404).json({ error: "user not found" })
-    }
-    const order = { id: orders.length + 1, userId, item }
-    orders.push(order)
-    await logEvent("backend", "info", "service", `order created for user ${userId}`, process.env.ACCESS_TOKEN)
-    res.json(order)
+
+    await logEvent("backend", "info", "route", `Stats retrieved for shortcode: ${code}`, process.env.ACCESS_TOKEN);
+
+    return res.json({
+      originalUrl: data.url,
+      createdAt: data.createdAt,
+      expiry: data.expiry,
+      clicks: data.clicks.length,
+      clickDetails: data.clicks,
+    });
   } catch (err) {
-    await logEvent("backend", "fatal", "service", err.message, process.env.ACCESS_TOKEN)
-    res.status(500).json({ error: "could not create order" })
+    await logEvent("backend", "error", "route", err.message, process.env.ACCESS_TOKEN);
+    res.status(500).json({ error: "Internal Server Error" });
   }
-})
+});
 
-app.get("/orders", async (req, res) => {
-  try {
-    if (orders.length === 0) {
-      await logEvent("backend", "warn", "repository", "no orders found", process.env.ACCESS_TOKEN)
-      return res.json({ orders: [] })
-    }
-    await logEvent("backend", "info", "repository", "fetched orders", process.env.ACCESS_TOKEN)
-    res.json({ orders })
-  } catch (err) {
-    await logEvent("backend", "error", "repository", err.message, process.env.ACCESS_TOKEN)
-    res.status(500).json({ error: "could not fetch orders" })
-  }
-})
-
-app.use(async (err, req, res, next) => {
-  await logEvent("backend", "fatal", "handler", err.message, process.env.ACCESS_TOKEN)
-  res.status(500).json({ error: "unhandled exception" })
-})
-
-app.listen(process.env.PORT || 3000)
+app.listen(process.env.PORT || 3000, () =>
+  console.log(`🚀 Server running on port ${process.env.PORT || 3000}`)
+);

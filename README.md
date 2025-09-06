@@ -1,40 +1,112 @@
-# Backend Assignment - Logging Middleware
+# URL Shortener Microservice
 
-## Setup
-1. Clone the repository
-2. Run `npm install`
-3. Create a `.env` file with:
-   ACCESS_TOKEN=your_access_token_here
-4. Start server with:
-   npm start
+This project is a simple HTTP URL Shortener Microservice built with Node.js and Express.
+It provides functionality to create short URLs, handle redirections, and retrieve usage statistics.
+It also includes a logging middleware that records application events through an external logging API.
+
+---
+
+## Features
+
+* Create short URLs with custom or auto-generated codes
+* Set expiry time (default: 30 minutes)
+* Redirect shortened URLs to their original destination
+* Retrieve statistics (click count, timestamps, referrers, mock geo)
+* Error handling for invalid or expired URLs
+* Integrated logging middleware for all requests and important events
+
 
 ## API Endpoints
-1. GET /users
-2. POST /users
-3. GET /orders
-4. PUT /orders
 
-## Example JSON
+### 1. Create Short URL
 
-1. For Users: 
+**POST** `/shorturls`
+**Body (JSON):**
+
 ```json
 {
-  "name": "John Doe",
-  "email": "john@example.com"
+  "url": "https://example.com/long/path/to/resource",
+  "validity": 10,
+  "shortcode": "abc123"
 }
 ```
-2. For Orders:
+
+**Response (201):**
+
 ```json
 {
-  "userId": 1,
-  "item": "Laptop"
+  "shortLink": "http://localhost:3000/abc123",
+  "expiry": "2025-09-06T08:30:00.000Z"
 }
 ```
+
+---
+
+### 2. Redirect
+
+**GET** `/:code`
+
+Example: `GET http://localhost:3000/abc123`
+
+Redirects to the original URL.
+If expired, response is:
+
+```json
+{ "error": "Shortcode expired" }
+```
+
+---
+
+### 3. Stats
+
+**GET** `/shorturls/:code/stats`
+
+**Response (200):**
+
+```json
+{
+  "originalUrl": "https://example.com/long/path/to/resource",
+  "createdAt": "2025-09-06T07:45:00.000Z",
+  "expiry": "2025-09-06T08:30:00.000Z",
+  "clicks": 2,
+  "clickDetails": [
+    {
+      "time": "2025-09-06T07:50:00.000Z",
+      "referrer": "unknown",
+      "geo": "IN"
+    }
+  ]
+}
+```
+
+---
 
 ## Logging
-All API calls trigger logs to Affordmed Logging API using the reusable middleware.
 
-## Screenshots of Requests
-Screenshots of requests for the routes used can be found in the following Google Drive folder:
+All requests and events are logged via `logger.js` to an external logging API.
 
-[Google Drive - API Requests Screenshots](https://drive.google.com/drive/folders/1WkfJVD-K5VDn6Via-vv3ZgLIdv_YlNZm?usp=sharing)
+Examples of logged events:
+
+* Incoming requests (method and path)
+* Short URL creation
+* Redirects
+* Errors (expired or missing shortcodes)
+* Stats retrieval
+
+---
+
+## Testing with Postman
+
+1. Start the server:
+
+   ```bash
+   node BackendTestSubmission/server.js
+   ```
+2. Use Postman to send requests to the endpoints:
+
+   * `POST http://localhost:3000/shorturls`
+   * `GET http://localhost:3000/:code`
+   * `GET http://localhost:3000/shorturls/:code/stats`
+3. Verify both responses and logs.
+
+---
